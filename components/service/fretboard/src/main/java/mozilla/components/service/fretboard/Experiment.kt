@@ -11,9 +11,9 @@ package mozilla.components.service.fretboard
  */
 data class Experiment(
     /**
-     * Unique identifier of the experiment
+     * Unique identifier of the experiment. Used internally by Kinto. Not exposed to library consumers.
      */
-    val id: String,
+    internal val id: String,
     /**
      * Human-readable name of the experiment
      */

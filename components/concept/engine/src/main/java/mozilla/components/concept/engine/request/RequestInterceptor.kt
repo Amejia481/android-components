@@ -20,11 +20,32 @@ interface RequestInterceptor {
     )
 
     /**
+     * An alternative response for an error request.
+     */
+    data class ErrorResponse(
+        val data: String,
+        val url: String? = null,
+        val mimeType: String = "text/html",
+        val encoding: String = "UTF-8"
+    )
+
+    /**
      * A request to open an URI. This is called before each page load to allow custom behavior implementation.
      *
      * @param session The engine session that initiated the callback.
      * @return An InterceptionResponse object containing alternative content if the request should be intercepted.
      *         <code>null</code> otherwise.
      */
-    fun onLoadRequest(session: EngineSession, uri: String): InterceptionResponse?
+    fun onLoadRequest(session: EngineSession, uri: String): InterceptionResponse? = null
+
+    /**
+     * A request that the engine wasn't able to handle that resulted in an error.
+     *
+     * @param session The engine session that initiated the callback.
+     * @param errorCode The error code that was provided by the engine related to the type of error caused.
+     * @param uri The uri that resulted in the error.
+     * @return An ErrorResponse object containing alternative content if the request caused an error.
+     *         <code>null</code> otherwise.
+     */
+    fun onErrorRequest(session: EngineSession, errorCode: Int, uri: String?): ErrorResponse? = null
 }

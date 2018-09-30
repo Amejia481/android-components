@@ -14,12 +14,13 @@ import mozilla.components.support.base.log.logger.Logger
  * @property storage experiment local storage mechanism
  * @param valuesProvider provider for the device's values
  */
+@Suppress("TooManyFunctions")
 class Fretboard(
     private val source: ExperimentSource,
     private val storage: ExperimentStorage,
     valuesProvider: ValuesProvider = ValuesProvider()
 ) {
-    private var experimentsResult: ExperimentsSnapshot = ExperimentsSnapshot(listOf(), null)
+    @Volatile private var experimentsResult: ExperimentsSnapshot = ExperimentsSnapshot(listOf(), null)
     private var experimentsLoaded: Boolean = false
     private val evaluator = ExperimentEvaluator(valuesProvider)
     private val logger = Logger(LOG_TAG)
@@ -105,7 +106,21 @@ class Fretboard(
     }
 
     /**
-     * Overrides a specified experiment
+     * Provides a map of active/inactive experiments
+     *
+     * @param context context
+     *
+     * @return map of experiments to A/B state
+     */
+    fun getExperimentsMap(context: Context): Map<String, Boolean> {
+        return experiments.associate {
+            it.name to
+                    isInExperiment(context, ExperimentDescriptor(it.name))
+        }
+    }
+
+    /**
+     * Overrides a specified experiment asynchronously
      *
      * @param context context
      * @param descriptor descriptor of the experiment
@@ -116,7 +131,19 @@ class Fretboard(
     }
 
     /**
-     * Clears an override for a specified experiment
+     * Overrides a specified experiment as a blocking operation
+     *
+     * @exception IllegalArgumentException when called from the main thread
+     * @param context context
+     * @param descriptor descriptor of the experiment
+     * @param active overridden value for the experiment, true to activate it, false to deactivate
+     */
+    fun setOverrideNow(context: Context, descriptor: ExperimentDescriptor, active: Boolean) {
+        evaluator.setOverrideNow(context, descriptor, active)
+    }
+
+    /**
+     * Clears an override for a specified experiment asynchronously
      *
      * @param context context
      * @param descriptor descriptor of the experiment
@@ -126,12 +153,44 @@ class Fretboard(
     }
 
     /**
-     * Clears all experiment overrides
+     * Clears an override for a specified experiment as a blocking operation
+     *
+     *
+     * @exception IllegalArgumentException when called from the main thread
+     * @param context context
+     * @param descriptor descriptor of the experiment
+     */
+    fun clearOverrideNow(context: Context, descriptor: ExperimentDescriptor) {
+        evaluator.clearOverrideNow(context, descriptor)
+    }
+
+    /**
+     * Clears all experiment overrides asynchronously
      *
      * @param context context
      */
     fun clearAllOverrides(context: Context) {
         evaluator.clearAllOverrides(context)
+    }
+
+    /**
+     * Clears all experiment overrides as a blocking operation
+     *
+     * @exception IllegalArgumentException when called from the main thread
+     * @param context context
+     */
+    fun clearAllOverridesNow(context: Context) {
+        evaluator.clearAllOverridesNow(context)
+    }
+
+    /**
+     * Returns the user bucket number used to determine whether the user
+     * is in or out of the experiment
+     *
+     * @param context context
+     */
+    fun getUserBucket(context: Context): Int {
+        return evaluator.getUserBucket(context)
     }
 
     companion object {

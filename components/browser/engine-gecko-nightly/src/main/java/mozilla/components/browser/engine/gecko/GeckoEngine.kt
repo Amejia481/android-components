@@ -40,10 +40,14 @@ class GeckoEngine(
     /**
      * See [Engine.settings]
      */
-    override val settings: Settings = object : Settings {
+    override val settings: Settings = object : Settings() {
         override var javascriptEnabled: Boolean
             get() = runtime.settings.javaScriptEnabled
             set(value) { runtime.settings.javaScriptEnabled = value }
+
+        override var webFontsEnabled: Boolean
+            get() = runtime.settings.webFontsEnabled
+            set(value) { runtime.settings.webFontsEnabled = value }
 
         override var trackingProtectionPolicy: TrackingProtectionPolicy?
             get() = TrackingProtectionPolicy.select(runtime.settings.trackingProtectionCategories)
@@ -55,6 +59,7 @@ class GeckoEngine(
     }.apply {
         defaultSettings?.let {
             this.javascriptEnabled = it.javascriptEnabled
+            this.webFontsEnabled = it.webFontsEnabled
             this.trackingProtectionPolicy = it.trackingProtectionPolicy
         }
     }

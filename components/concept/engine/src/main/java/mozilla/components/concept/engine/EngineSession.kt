@@ -4,6 +4,7 @@
 
 package mozilla.components.concept.engine
 
+import android.graphics.Bitmap
 import android.support.annotation.CallSuper
 import mozilla.components.support.base.observer.Observable
 import mozilla.components.support.base.observer.ObserverRegistry
@@ -30,9 +31,11 @@ abstract class EngineSession(
         fun onTrackerBlockingEnabledChange(enabled: Boolean) = Unit
         fun onTrackerBlocked(url: String) = Unit
         fun onLongPress(hitResult: HitResult) = Unit
-        fun onDesktopModeEnabled(enabled: Boolean) = Unit
+        fun onDesktopModeChange(enabled: Boolean) = Unit
         fun onFind(text: String) = Unit
         fun onFindResult(activeMatchOrdinal: Int, numberOfMatches: Int, isDoneCounting: Boolean) = Unit
+        fun onFullScreenChange(enabled: Boolean) = Unit
+        fun onThumbnailChange(bitmap: Bitmap?) = Unit
 
         @Suppress("LongParameterList")
         fun onExternalResource(
@@ -157,7 +160,12 @@ abstract class EngineSession(
     /**
      * Enables/disables Desktop Mode with an optional ability to reload the session right after.
      */
-    abstract fun setDesktopMode(enable: Boolean, reload: Boolean = false)
+    abstract fun toggleDesktopMode(enable: Boolean, reload: Boolean = false)
+
+    /**
+     * Clears all user data sources available.
+     */
+    abstract fun clearData()
 
     /**
      * Finds and highlights all occurrences of the provided String and highlights them asynchronously.
@@ -178,6 +186,16 @@ abstract class EngineSession(
      * Clears the highlighted results of previous calls to [findAll] / [findNext].
      */
     abstract fun clearFindMatches()
+
+    /**
+     * Exits fullscreen mode if currently in it that state.
+     */
+    abstract fun exitFullScreenMode()
+
+    /**
+     * Takes a screenshot of the actual tab
+     */
+    abstract fun captureThumbnail(): Bitmap?
 
     /**
      * Close the session. This may free underlying objects. Call this when you are finished using

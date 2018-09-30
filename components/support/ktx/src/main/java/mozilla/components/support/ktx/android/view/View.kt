@@ -8,21 +8,10 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.support.v4.view.ViewCompat
-import android.util.TypedValue
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import mozilla.components.support.ktx.android.content.systemService
 import java.lang.ref.WeakReference
-
-/**
- * The resolved layout direction for this view.
- *
- * @return {@link #LAYOUT_DIRECTION_RTL} if the layout direction is RTL or returns
- * {@link #LAYOUT_DIRECTION_LTR} if the layout direction is not RTL.
- */
-val View.layoutDirection: Int
-    get() =
-        ViewCompat.getLayoutDirection(this)
 
 /**
  * Is the horizontal layout direction of this view from Right to Left?
@@ -35,12 +24,6 @@ val View.isRTL: Boolean
  */
 val View.isLTR: Boolean
     get() = layoutDirection == ViewCompat.LAYOUT_DIRECTION_LTR
-
-/**
- * Converts a value in density independent pixels (dp) to the actual pixel values for the display.
- */
-fun View.dp(pixels: Int) = TypedValue.applyDimension(
-    TypedValue.COMPLEX_UNIT_DIP, pixels.toFloat(), resources.displayMetrics).toInt()
 
 /**
  * Returns true if this view's visibility is set to View.VISIBLE.

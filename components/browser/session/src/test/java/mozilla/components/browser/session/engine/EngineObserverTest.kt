@@ -3,17 +3,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 package mozilla.components.browser.session.engine
-
+import android.graphics.Bitmap
 import mozilla.components.browser.session.Session
 import mozilla.components.concept.engine.EngineSession
-import mozilla.components.concept.engine.Settings
 import mozilla.components.concept.engine.HitResult
+import mozilla.components.concept.engine.Settings
 import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.spy
 
 class EngineObserverTest {
 
@@ -31,10 +32,15 @@ class EngineObserverTest {
             override fun restoreState(state: Map<String, Any>) {}
             override fun enableTrackingProtection(policy: TrackingProtectionPolicy) {}
             override fun disableTrackingProtection() {}
-            override fun setDesktopMode(enable: Boolean, reload: Boolean) {}
+            override fun toggleDesktopMode(enable: Boolean, reload: Boolean) {
+                notifyObservers { onDesktopModeChange(enable) }
+            }
+            override fun clearData() {}
             override fun findAll(text: String) {}
             override fun findNext(forward: Boolean) {}
             override fun clearFindMatches() {}
+            override fun exitFullScreenMode() {}
+            override fun captureThumbnail(): Bitmap? = null
             override fun saveState(): Map<String, Any> {
                 return emptyMap()
             }
@@ -55,12 +61,14 @@ class EngineObserverTest {
         engineSession.register(EngineObserver(session))
 
         engineSession.loadUrl("http://mozilla.org")
+        engineSession.toggleDesktopMode(true)
         Assert.assertEquals("http://mozilla.org", session.url)
         Assert.assertEquals("", session.searchTerms)
         Assert.assertEquals(100, session.progress)
         Assert.assertEquals(true, session.loading)
         Assert.assertEquals(true, session.canGoForward)
         Assert.assertEquals(true, session.canGoBack)
+        Assert.assertEquals(true, session.desktopMode)
     }
 
     @Test
@@ -77,10 +85,13 @@ class EngineObserverTest {
             override fun restoreState(state: Map<String, Any>) {}
             override fun enableTrackingProtection(policy: TrackingProtectionPolicy) {}
             override fun disableTrackingProtection() {}
-            override fun setDesktopMode(enable: Boolean, reload: Boolean) {}
+            override fun toggleDesktopMode(enable: Boolean, reload: Boolean) {}
+            override fun clearData() {}
             override fun findAll(text: String) {}
             override fun findNext(forward: Boolean) {}
             override fun clearFindMatches() {}
+            override fun exitFullScreenMode() {}
+            override fun captureThumbnail(): Bitmap? = null
             override fun saveState(): Map<String, Any> {
                 return emptyMap()
             }
@@ -122,16 +133,19 @@ class EngineObserverTest {
                 notifyObservers { onTrackerBlockingEnabledChange(false) }
             }
 
-            override fun setDesktopMode(enable: Boolean, reload: Boolean) {}
+            override fun toggleDesktopMode(enable: Boolean, reload: Boolean) {}
+            override fun captureThumbnail(): Bitmap? = null
             override fun saveState(): Map<String, Any> {
                 return emptyMap()
             }
 
             override fun loadUrl(url: String) {}
             override fun loadData(data: String, mimeType: String, encoding: String) {}
+            override fun clearData() {}
             override fun findAll(text: String) {}
             override fun findNext(forward: Boolean) {}
             override fun clearFindMatches() {}
+            override fun exitFullScreenMode() {}
         }
         val observer = EngineObserver(session)
         engineSession.register(observer)
@@ -220,5 +234,25 @@ class EngineObserverTest {
 
         observer.onLoadingStateChange(true)
         assertEquals(emptyList<String>(), session.findResults)
+    }
+
+    @Test
+    fun testEngineObserverNotifiesFullscreenMode() {
+        val session = Session("https://www.mozilla.org")
+        val observer = EngineObserver(session)
+
+        observer.onFullScreenChange(true)
+        assertEquals(true, session.fullScreenMode)
+        observer.onFullScreenChange(false)
+        assertEquals(false, session.fullScreenMode)
+    }
+
+    @Test
+    fun `Engine observer notified when thumbnail is assigned`() {
+        val session = Session("https://www.mozilla.org")
+        val observer = EngineObserver(session)
+        val emptyBitmap = spy(Bitmap::class.java)
+        observer.onThumbnailChange(emptyBitmap)
+        assertEquals(emptyBitmap, session.thumbnail)
     }
 }

@@ -4,6 +4,7 @@
 
 package mozilla.components.browser.session.engine
 
+import android.graphics.Bitmap
 import android.os.Environment
 import mozilla.components.browser.session.Download
 import mozilla.components.browser.session.Session
@@ -76,5 +77,17 @@ internal class EngineObserver(val session: Session) : EngineSession.Observer {
     ) {
         val download = Download(url, fileName, contentType, contentLength, userAgent, Environment.DIRECTORY_DOWNLOADS)
         session.download = Consumable.from(download)
+    }
+
+    override fun onDesktopModeChange(enabled: Boolean) {
+        session.desktopMode = enabled
+    }
+
+    override fun onFullScreenChange(enabled: Boolean) {
+        session.fullScreenMode = enabled
+    }
+
+    override fun onThumbnailChange(bitmap: Bitmap?) {
+        session.thumbnail = bitmap
     }
 }

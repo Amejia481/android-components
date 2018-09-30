@@ -8,6 +8,7 @@ import android.content.Context
 import android.util.AttributeSet
 import mozilla.components.concept.engine.Engine
 import mozilla.components.concept.engine.EngineSession
+import mozilla.components.concept.engine.EngineSession.TrackingProtectionPolicy
 import mozilla.components.concept.engine.EngineView
 import mozilla.components.concept.engine.Settings
 import org.mozilla.geckoview.GeckoRuntime
@@ -17,7 +18,7 @@ import org.mozilla.geckoview.GeckoRuntime
  */
 class GeckoEngine(
     private val runtime: GeckoRuntime,
-    defaultSettings: Settings? = null
+    private val defaultSettings: Settings? = null
 ) : Engine {
 
     /**
@@ -31,24 +32,35 @@ class GeckoEngine(
      * Creates a new Gecko-based EngineSession.
      */
     override fun createSession(private: Boolean): EngineSession {
-        return GeckoEngineSession(runtime, private)
+        return GeckoEngineSession(runtime, private, defaultSettings)
     }
 
-    /**
-     * See [Engine.name]
-     */
     override fun name(): String = "Gecko"
 
     /**
      * See [Engine.settings]
      */
-    override val settings: Settings = object : Settings {
+    override val settings: Settings = object : Settings() {
         override var javascriptEnabled: Boolean
             get() = runtime.settings.javaScriptEnabled
             set(value) { runtime.settings.javaScriptEnabled = value }
+
+        override var webFontsEnabled: Boolean
+            get() = runtime.settings.webFontsEnabled
+            set(value) { runtime.settings.webFontsEnabled = value }
+
+        override var trackingProtectionPolicy: TrackingProtectionPolicy?
+            get() = TrackingProtectionPolicy.select(runtime.settings.trackingProtectionCategories)
+            set(value) {
+                value?.let {
+                    runtime.settings.trackingProtectionCategories = it.categories
+                }
+            }
     }.apply {
         defaultSettings?.let {
-            this.javascriptEnabled = defaultSettings.javascriptEnabled
+            this.javascriptEnabled = it.javascriptEnabled
+            this.webFontsEnabled = it.webFontsEnabled
+            this.trackingProtectionPolicy = it.trackingProtectionPolicy
         }
     }
 }

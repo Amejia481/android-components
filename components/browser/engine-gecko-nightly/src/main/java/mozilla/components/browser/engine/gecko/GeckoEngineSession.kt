@@ -4,15 +4,17 @@
 
 package mozilla.components.browser.engine.gecko
 
+import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import kotlinx.coroutines.experimental.CompletableDeferred
 import kotlinx.coroutines.experimental.runBlocking
 import mozilla.components.concept.engine.EngineSession
-import mozilla.components.concept.engine.Settings
 import mozilla.components.concept.engine.HitResult
+import mozilla.components.concept.engine.Settings
 import mozilla.components.concept.engine.request.RequestInterceptor
-import mozilla.components.support.ktx.kotlin.isPhone
 import mozilla.components.support.ktx.kotlin.isEmail
 import mozilla.components.support.ktx.kotlin.isGeoLocation
+import mozilla.components.support.ktx.kotlin.isPhone
 import org.mozilla.gecko.util.ThreadUtils
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -38,7 +40,7 @@ class GeckoEngineSession(
     /**
      * See [EngineSession.settings]
      */
-    override val settings: Settings = object : Settings {
+    override val settings: Settings = object : Settings() {
         override var requestInterceptor: RequestInterceptor? = null
     }
 
@@ -160,7 +162,7 @@ class GeckoEngineSession(
     /**
      * See [EngineSession.settings]
      */
-    override fun setDesktopMode(enable: Boolean, reload: Boolean) {
+    override fun toggleDesktopMode(enable: Boolean, reload: Boolean) {
         val currentMode = geckoSession.settings.getInt(GeckoSessionSettings.USER_AGENT_MODE)
         val newMode = if (enable) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
@@ -170,12 +172,19 @@ class GeckoEngineSession(
 
         if (newMode != currentMode) {
             geckoSession.settings.setInt(GeckoSessionSettings.USER_AGENT_MODE, newMode)
-            notifyObservers { onDesktopModeEnabled(enable) }
+            notifyObservers { onDesktopModeChange(enable) }
         }
 
         if (reload) {
             geckoSession.reload()
         }
+    }
+
+    /**
+     * See [EngineSession.clearData]
+     */
+    override fun clearData() {
+        // API not available yet.
     }
 
     /**
@@ -194,6 +203,7 @@ class GeckoEngineSession(
     /**
      * See [EngineSession.findNext]
      */
+    @SuppressLint("WrongConstant") // FinderFindFlags annotation doesn't include a 0 value.
     override fun findNext(forward: Boolean) {
         val findFlags = if (forward) 0 else GeckoSession.FINDER_FIND_BACKWARDS
         geckoSession.finder.find(null, findFlags).then { result: GeckoSession.FinderResult? ->
@@ -212,13 +222,17 @@ class GeckoEngineSession(
     }
 
     /**
+     * See [EngineSession.exitFullScreenMode]
+     */
+    override fun exitFullScreenMode() {
+        geckoSession.exitFullScreen()
+    }
+
+    /**
      * NavigationDelegate implementation for forwarding callbacks to observers of the session.
      */
+    @Suppress("ComplexMethod")
     private fun createNavigationDelegate() = object : GeckoSession.NavigationDelegate {
-        override fun onLoadError(session: GeckoSession?, uri: String?, category: Int, error: Int): GeckoResult<String> {
-            return GeckoResult.fromValue(null)
-        }
-
         override fun onLocationChange(session: GeckoSession?, url: String) {
             // Ignore initial load of about:blank (see https://github.com/mozilla-mobile/android-components/issues/403)
             if (initialLoad && url == ABOUT_BLANK) {
@@ -257,6 +271,22 @@ class GeckoEngineSession(
             session: GeckoSession,
             uri: String
         ): GeckoResult<GeckoSession> = GeckoResult.fromValue(null)
+
+        override fun onLoadError(
+            session: GeckoSession?,
+            uri: String,
+            category: Int,
+            error: Int
+        ): GeckoResult<String> {
+            settings.requestInterceptor?.onErrorRequest(
+                this@GeckoEngineSession,
+                error,
+                uri
+            )?.apply {
+                return GeckoResult.fromValue(data)
+            }
+            return GeckoResult.fromValue(null)
+        }
     }
 
     /**
@@ -319,7 +349,9 @@ class GeckoEngineSession(
 
         override fun onCrash(session: GeckoSession?) = Unit
 
-        override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) = Unit
+        override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
+            notifyObservers { onFullScreenChange(fullScreen) }
+        }
 
         override fun onExternalResponse(session: GeckoSession, response: GeckoSession.WebResponseInfo) {
             notifyObservers {
@@ -379,6 +411,12 @@ class GeckoEngineSession(
             }
             else -> HitResult.UNKNOWN("")
         }
+    }
+
+    override fun captureThumbnail(): Bitmap? {
+        // TODO Waiting for the Gecko team to create an API for this
+        // See https://bugzilla.mozilla.org/show_bug.cgi?id=1462018
+        return null
     }
 
     companion object {

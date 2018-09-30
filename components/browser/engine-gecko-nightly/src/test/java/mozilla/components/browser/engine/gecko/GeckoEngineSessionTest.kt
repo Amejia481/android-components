@@ -29,6 +29,7 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.spy
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyZeroInteractions
 import org.mozilla.gecko.util.BundleEventListener
 import org.mozilla.gecko.util.GeckoBundle
 import org.mozilla.gecko.util.ThreadUtils
@@ -40,6 +41,8 @@ import org.mozilla.geckoview.GeckoSession.ContentDelegate.ELEMENT_TYPE_AUDIO
 import org.mozilla.geckoview.GeckoSession.ContentDelegate.ELEMENT_TYPE_IMAGE
 import org.mozilla.geckoview.GeckoSession.ContentDelegate.ELEMENT_TYPE_NONE
 import org.mozilla.geckoview.GeckoSession.ContentDelegate.ELEMENT_TYPE_VIDEO
+import org.mozilla.geckoview.GeckoSession.NavigationDelegate.ERROR_CATEGORY_UNKNOWN
+import org.mozilla.geckoview.GeckoSession.NavigationDelegate.ERROR_UNKNOWN
 import org.mozilla.geckoview.GeckoSession.ProgressDelegate.SecurityInformation
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.SessionFinder
@@ -482,6 +485,44 @@ class GeckoEngineSessionTest {
     }
 
     @Test
+    fun testOnLoadErrorCallsInterceptor() {
+        var interceptorCalledWithUri: String? = null
+        val requestInterceptor: RequestInterceptor = mock()
+        var defaultSettings = DefaultSettings()
+        var engineSession = GeckoEngineSession(mock(), defaultSettings = defaultSettings)
+
+        // Interceptor is not called when there is none attached.
+        var onLoadError = engineSession.geckoSession.navigationDelegate.onLoadError(
+            engineSession.geckoSession,
+            "",
+            ERROR_CATEGORY_UNKNOWN,
+            ERROR_UNKNOWN
+        )
+        verify(requestInterceptor, never()).onErrorRequest(engineSession, ERROR_CATEGORY_UNKNOWN, "")
+        onLoadError.then { value: String? ->
+            interceptorCalledWithUri = value
+            GeckoResult<String>(null)
+        }
+        assertNull(interceptorCalledWithUri)
+
+        // Interceptor is called correctly
+        defaultSettings = DefaultSettings(requestInterceptor = requestInterceptor)
+        engineSession = GeckoEngineSession(mock(), defaultSettings = defaultSettings)
+        onLoadError = engineSession.geckoSession.navigationDelegate.onLoadError(
+            engineSession.geckoSession,
+            "",
+            ERROR_CATEGORY_UNKNOWN,
+            ERROR_UNKNOWN
+        )
+        verify(requestInterceptor).onErrorRequest(engineSession, ERROR_UNKNOWN, "")
+        onLoadError.then { value: String? ->
+            interceptorCalledWithUri = value
+            GeckoResult<String>(null)
+        }
+        assertNull(interceptorCalledWithUri)
+    }
+
+    @Test
     fun testDefaultSettings() {
         val runtime = mock(GeckoRuntime::class.java)
         `when`(runtime.settings).thenReturn(mock(GeckoRuntimeSettings::class.java))
@@ -571,22 +612,22 @@ class GeckoEngineSessionTest {
 
         var desktopModeEnabled = false
         engineSession.register(object : EngineSession.Observer {
-            override fun onDesktopModeEnabled(enabled: Boolean) {
+            override fun onDesktopModeChange(enabled: Boolean) {
                 desktopModeEnabled = true
             }
         })
-        engineSession.setDesktopMode(true)
+        engineSession.toggleDesktopMode(true)
         assertTrue(desktopModeEnabled)
 
         desktopModeEnabled = false
-        engineSession.setDesktopMode(true)
+        engineSession.toggleDesktopMode(true)
         assertFalse(desktopModeEnabled)
 
         engineSession.geckoSession.settings.setInt(GeckoSessionSettings.USER_AGENT_MODE, GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
-        engineSession.setDesktopMode(true)
+        engineSession.toggleDesktopMode(true)
         assertFalse(desktopModeEnabled)
 
-        engineSession.setDesktopMode(false)
+        engineSession.toggleDesktopMode(false)
         assertTrue(desktopModeEnabled)
     }
 
@@ -665,5 +706,50 @@ class GeckoEngineSessionTest {
 
         engineSession.clearFindMatches()
         assertTrue(clearMatchesReceived)
+    }
+
+    @Test
+    fun testExitFullScreenModeTriggersExitEvent() {
+        val engineSession = GeckoEngineSession(mock(GeckoRuntime::class.java))
+        val geckoSession = spy(engineSession.geckoSession)
+        engineSession.geckoSession = geckoSession
+        val observer: EngineSession.Observer = mock()
+
+        // Verify the event is triggered for exiting fullscreen mode and GeckoView is called.
+        var fullScreenExitReceived = false
+        engineSession.geckoSession.eventDispatcher.registerUiThreadListener(
+            BundleEventListener { _, _, _ -> fullScreenExitReceived = true },
+            "GeckoViewContent:ExitFullScreen"
+        )
+        engineSession.exitFullScreenMode()
+        assertTrue(fullScreenExitReceived)
+        verify(geckoSession).exitFullScreen()
+
+        // Verify the call to the observer.
+        engineSession.register(observer)
+        engineSession.geckoSession.contentDelegate.onFullScreen(geckoSession, true)
+        verify(observer).onFullScreenChange(true)
+    }
+
+    @Test
+    fun testExitFullscreenTrueHasNoInteraction() {
+        val engineSession = GeckoEngineSession(mock(GeckoRuntime::class.java))
+        val geckoSession = spy(engineSession.geckoSession)
+        engineSession.geckoSession = geckoSession
+
+        engineSession.exitFullScreenMode()
+        verify(geckoSession).exitFullScreen()
+    }
+
+    fun testClearData() {
+        val runtime = mock(GeckoRuntime::class.java)
+        val engineSession = GeckoEngineSession(runtime)
+        val observer: EngineSession.Observer = mock()
+
+        engineSession.register(observer)
+
+        engineSession.clearData()
+
+        verifyZeroInteractions(observer)
     }
 }
