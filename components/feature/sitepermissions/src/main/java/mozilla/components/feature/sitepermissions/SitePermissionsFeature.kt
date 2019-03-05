@@ -14,17 +14,24 @@ import android.support.annotation.VisibleForTesting
 import android.support.annotation.VisibleForTesting.PRIVATE
 import android.support.v4.content.ContextCompat
 import android.view.View
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import mozilla.components.browser.session.SelectionAwareSessionObserver
 import mozilla.components.browser.session.Session
 import mozilla.components.browser.session.SessionManager
 import mozilla.components.concept.engine.permission.Permission
-import mozilla.components.concept.engine.permission.Permission.ContentGeoLocation
-import mozilla.components.concept.engine.permission.Permission.ContentNotification
 import mozilla.components.concept.engine.permission.Permission.ContentAudioCapture
 import mozilla.components.concept.engine.permission.Permission.ContentAudioMicrophone
+import mozilla.components.concept.engine.permission.Permission.ContentGeoLocation
+import mozilla.components.concept.engine.permission.Permission.ContentNotification
 import mozilla.components.concept.engine.permission.Permission.ContentVideoCamera
 import mozilla.components.concept.engine.permission.Permission.ContentVideoCapture
 import mozilla.components.concept.engine.permission.PermissionRequest
+import mozilla.components.feature.sitepermissions.SitePermissions.Status.ALLOWED
+import mozilla.components.feature.sitepermissions.SitePermissions.Status.BLOCKED
 import mozilla.components.support.base.feature.LifecycleAwareFeature
 import mozilla.components.support.ktx.kotlin.toUri
 import mozilla.components.ui.doorhanger.DoorhangerPrompt
@@ -48,7 +55,7 @@ typealias OnNeedToRequestPermissions = (permissions: Array<String>) -> Unit
  * need to be requested. Once the request is completed, [onPermissionsResult] needs to be invoked.
  **/
 
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LargeClass")
 class SitePermissionsFeature(
     private val anchorView: View,
     private val sessionManager: SessionManager,
@@ -56,6 +63,14 @@ class SitePermissionsFeature(
 ) : LifecycleAwareFeature {
 
     private val observer = SitePermissionsRequestObserver(sessionManager, feature = this)
+
+    internal val storage by lazy { storageInitializer() }
+    internal val ioCoroutineScope by lazy { CoroutineScope(Dispatchers.IO) }
+
+    @VisibleForTesting
+    internal var storageInitializer = {
+        SitePermissionsStorage(anchorView.context)
+    }
 
     override fun start() {
         observer.observeSelected()
@@ -96,10 +111,28 @@ class SitePermissionsFeature(
      * @param grantedPermissions the list of [grantedPermissions] that have been granted.
      */
     private fun onContentPermissionGranted(session: Session, grantedPermissions: List<Permission>) {
-        session.contentPermissionRequest.consume {
-            it.grant()
-            // Update the DB
+        session.contentPermissionRequest.consume { request ->
+            request.grant()
+            ioCoroutineScope.launch {
+                storeSitePermissions(request, grantedPermissions, ALLOWED)
+            }
             true
+        }
+    }
+
+    internal fun storeSitePermissions(
+        request: PermissionRequest,
+        permissions: List<Permission> = request.permissions,
+        status: SitePermissions.Status
+    ) {
+        var sitePermissions = storage.findSitePermissionsBy(request.host)
+
+        if (sitePermissions == null) {
+            sitePermissions = request.toSitePermissions(status = status, permissions = permissions)
+            storage.save(sitePermissions)
+        } else {
+            sitePermissions = request.toSitePermissions(status, sitePermissions)
+            storage.update(sitePermissions)
         }
     }
 
@@ -109,19 +142,115 @@ class SitePermissionsFeature(
      * @param session the session which requested the permissions.
      */
     private fun onContentPermissionDeny(session: Session) {
-        session.contentPermissionRequest.consume {
-            it.reject()
-            // Update the DB
+        session.contentPermissionRequest.consume { request ->
+            request.reject()
+            ioCoroutineScope.launch {
+                storeSitePermissions(request = request, status = BLOCKED)
+            }
             true
         }
     }
 
-    internal fun onContentPermissionRequested(
+    internal suspend fun onContentPermissionRequested(
         session: Session,
         permissionRequest: PermissionRequest
+    ): DoorhangerPrompt? {
+        val host = permissionRequest.host
+
+        val isSitePermissionsAllowed = ioCoroutineScope.async {
+            isSitePermissionGrantedInTheStorage(host, permissionRequest)
+        }
+
+        return if (!isSitePermissionsAllowed.await()) {
+            createPrompt(permissionRequest, session, host)
+        } else {
+            permissionRequest.grant()
+            null
+        }
+    }
+
+    internal fun isSitePermissionGrantedInTheStorage(
+        host: String,
+        permissionRequest: PermissionRequest
+    ): Boolean {
+        val permissionFromStorage = storage.findSitePermissionsBy(host)
+
+        return if (permissionFromStorage == null) {
+            false
+        } else {
+            permissionRequest.permissions.all { permission ->
+                isPermissionGranted(permission, permissionFromStorage)
+            }
+        }
+    }
+
+    private fun PermissionRequest.toSitePermissions(
+        status: SitePermissions.Status,
+        initialSitePermission: SitePermissions = SitePermissions(host, savedAt = System.currentTimeMillis()),
+        permissions: List<Permission> = this.permissions
+    ): SitePermissions {
+        var sitePermissions = initialSitePermission
+        for (permission in permissions) {
+            sitePermissions = updateSitePermissionsStatus(status, permission, sitePermissions)
+        }
+        return sitePermissions
+    }
+
+    private fun isPermissionGranted(
+        permission: Permission,
+        permissionFromStorage: SitePermissions
+    ): Boolean {
+        return when (permission) {
+            is ContentGeoLocation -> {
+                permissionFromStorage.location.isAllowed()
+            }
+            is ContentNotification -> {
+                permissionFromStorage.notification.isAllowed()
+            }
+            is ContentAudioCapture, is ContentAudioMicrophone -> {
+                permissionFromStorage.microphone.isAllowed()
+            }
+            is ContentVideoCamera, is ContentVideoCapture -> {
+                permissionFromStorage.cameraBack.isAllowed() || permissionFromStorage.cameraFront.isAllowed()
+            }
+            else ->
+                throw InvalidParameterException("$permission is not a valid permission.")
+        }
+    }
+
+    private fun updateSitePermissionsStatus(
+        status: SitePermissions.Status,
+        permission: Permission,
+        sitePermissions: SitePermissions
+    ): SitePermissions {
+        return when (permission) {
+            is ContentGeoLocation -> {
+                sitePermissions.copy(location = status)
+            }
+            is ContentNotification -> {
+                sitePermissions.copy(notification = status)
+            }
+            is ContentAudioCapture, is ContentAudioMicrophone -> {
+                sitePermissions.copy(microphone = status)
+            }
+            is ContentVideoCamera, is ContentVideoCapture -> {
+                if (permission.isFrontCamera) {
+                    sitePermissions.copy(cameraFront = status)
+                } else {
+                    sitePermissions.copy(cameraBack = status)
+                }
+            }
+            else ->
+                throw InvalidParameterException("$permission is not a valid permission.")
+        }
+    }
+
+    private fun createPrompt(
+        permissionRequest: PermissionRequest,
+        session: Session,
+        host: String
     ): DoorhangerPrompt {
         val context = anchorView.context
-        val host = permissionRequest.uri?.toUri()?.host ?: ""
         val allowButtonTitle = context.getString(R.string.mozac_feature_sitepermissions_allow)
         val denyString = context.getString(R.string.mozac_feature_sitepermissions_not_allow)
 
@@ -173,12 +302,11 @@ class SitePermissionsFeature(
             onContentPermissionGranted(session, listOf(selectedCameraPermission, selectedMicrophonePermission))
         }
 
-        val prompt = DoorhangerPrompt(
+        return DoorhangerPrompt(
             title = title,
             controlGroups = listOf(cameraControlGroup, microphoneControlGroups),
             buttons = listOf(denyButton, allowButton)
         )
-        return prompt
     }
 
     private fun handlingSingleContentPermissions(
@@ -336,13 +464,13 @@ class SitePermissionsFeature(
 
     private fun getCameraTextOptions(cameraPermissions: List<Permission>): Pair<String, String> {
         val context = anchorView.context
-        val option1Text = if (cameraPermissions[0].desc?.contains("back") == true) {
+        val option1Text = if (cameraPermissions[0].isBackCamera) {
             R.string.mozac_feature_sitepermissions_back_facing_camera
         } else {
             R.string.mozac_feature_sitepermissions_selfie_camera
         }
 
-        val option2Text = if (cameraPermissions[1].desc?.contains("back") == true) {
+        val option2Text = if (cameraPermissions[1].isBackCamera) {
             R.string.mozac_feature_sitepermissions_back_facing_camera
         } else {
             R.string.mozac_feature_sitepermissions_selfie_camera
@@ -370,13 +498,19 @@ class SitePermissionsFeature(
         return false
     }
 
+    private val PermissionRequest.host get() = uri?.toUri()?.host ?: ""
+    private val Permission.isBackCamera get() = desc?.contains("back") ?: false
+    private val Permission.isFrontCamera get() = desc?.contains("front") ?: false
+
     internal class SitePermissionsRequestObserver(
         sessionManager: SessionManager,
         private val feature: SitePermissionsFeature
     ) : SelectionAwareSessionObserver(sessionManager) {
 
         override fun onContentPermissionRequested(session: Session, permissionRequest: PermissionRequest): Boolean {
-            feature.onContentPermissionRequested(session, permissionRequest)
+            runBlocking {
+                feature.onContentPermissionRequested(session, permissionRequest)
+            }
             return false
         }
 

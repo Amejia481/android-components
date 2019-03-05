@@ -23,6 +23,8 @@ data class SitePermissions(
     enum class Status(
         internal val id: Int
     ) {
-        BLOCKED(-1), NO_DECISION(0), ALLOWED(1)
+        BLOCKED(-1), NO_DECISION(0), ALLOWED(1);
+
+        fun isAllowed() = this == ALLOWED
     }
 }
