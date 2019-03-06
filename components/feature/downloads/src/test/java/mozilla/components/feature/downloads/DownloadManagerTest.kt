@@ -7,12 +7,15 @@ package mozilla.components.feature.downloads
 import android.Manifest.permission.INTERNET
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE
+import android.app.DownloadManager.Request
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
-import org.junit.Assert.assertFalse
 import mozilla.components.browser.session.Download
 import mozilla.components.support.test.robolectric.grantPermission
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -97,6 +100,25 @@ class DownloadManagerTest {
         notifyDownloadCompleted(id)
 
         assertFalse(downloadCompleted)
+    }
+
+    @Test
+    fun `no null or empty headers must be added to the DownloadManager`() {
+        val request = Request(Uri.parse(download.url))
+
+        var wasAdded = request.addRequestHeaderSafely("User-Agent", "")
+
+        assertFalse(wasAdded)
+
+        wasAdded = request.addRequestHeaderSafely("User-Agent", null)
+
+        assertFalse(wasAdded)
+
+        val fireFox = "Mozilla/5.0 (Windows NT 5.1; rv:7.0.1) Gecko/20100101 Firefox/7.0.1"
+
+        wasAdded = request.addRequestHeaderSafely("User-Agent", fireFox)
+
+        assertTrue(wasAdded)
     }
 
     private fun notifyDownloadCompleted(id: Long) {
