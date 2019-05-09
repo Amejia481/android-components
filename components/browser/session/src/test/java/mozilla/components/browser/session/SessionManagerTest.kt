@@ -1176,4 +1176,23 @@ class SessionManagerTest {
         assertTrue(executed)
         assertTrue(selectedSessionId == "selectedSessionId")
     }
+
+    @Test
+    fun `SessionManager#runWithSessionIdOrSelected must only run on the SessionId when the session manager has both a selected session and the provided sessionId`() {
+        val sessionManager = spy(SessionManager(mock()))
+        val anotherSession = Session("", id = "anotherSessionId")
+        val selectedSession = Session("", id = "selectedSessionId")
+
+        sessionManager.add(anotherSession)
+        sessionManager.add(selectedSession)
+        sessionManager.select(selectedSession)
+
+        var runSessionId = "123"
+        val executed = sessionManager.runWithSessionIdOrSelected("anotherSessionId") { session ->
+            runSessionId = session.id
+        }
+
+        assertTrue(executed)
+        assertTrue(runSessionId == "anotherSessionId")
+    }
 }
