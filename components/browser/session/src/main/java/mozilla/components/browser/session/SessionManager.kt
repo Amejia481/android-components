@@ -236,12 +236,12 @@ fun SessionManager.runWithSessionIdOrSelected(
     sessionId?.let {
         findSessionById(sessionId)?.let { session ->
             block(session)
-            blockWasRun = true
+            return true
         }
     }
     selectedSession?.let {
         block(it)
-        blockWasRun = true
+       return true
     }
     return blockWasRun
 }
