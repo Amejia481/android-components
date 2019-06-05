@@ -16,7 +16,6 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import mozilla.components.support.ktx.android.content.res.pxToDp
-import mozilla.components.support.ktx.android.view.isRTL
 
 /**
  * A popup menu composed of BrowserMenuItem objects.
@@ -27,34 +26,33 @@ class BrowserMenu internal constructor(
     private var currentPopup: PopupWindow? = null
     private var menuList: RecyclerView? = null
 
+    @Suppress("UNUSED_PARAMETER")
     @SuppressLint("InflateParams")
     fun show(anchor: View, orientation: Orientation = Orientation.DOWN): PopupWindow {
-        val view = LayoutInflater.from(anchor.context).inflate(R.layout.mozac_browser_menu, null)
+        val rootView = LayoutInflater.from(anchor.context).inflate(R.layout.mozac_browser_menu, null)
 
         adapter.menu = this
 
-        menuList = view.findViewById<RecyclerView>(R.id.mozac_browser_menu_recyclerView).apply {
+        menuList = rootView.findViewById<RecyclerView>(R.id.mozac_browser_menu_recyclerView).apply {
             layoutManager = LinearLayoutManager(anchor.context, RecyclerView.VERTICAL, false)
             adapter = this@BrowserMenu.adapter
         }
 
         return PopupWindow(
-                view,
+                rootView,
                 WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT
+            calculatePopupHeight(rootView)
         ).apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             isFocusable = true
-            elevation = view.resources.pxToDp(MENU_ELEVATION_DP).toFloat()
+            elevation = rootView.resources.pxToDp(MENU_ELEVATION_DP).toFloat()
 
             setOnDismissListener {
                 adapter.menu = null
                 currentPopup = null
             }
 
-            val xOffset = if (anchor.isRTL) -anchor.width else 0
-            val yOffset = determineVerticalOffset(orientation, view, anchor)
-            showAsDropDown(anchor, xOffset, yOffset)
+            showAsDropDown(anchor)
         }.also {
             currentPopup = it
         }
@@ -91,6 +89,18 @@ class BrowserMenu internal constructor(
     enum class Orientation {
         UP,
         DOWN
+    }
+
+    private fun calculatePopupHeight(container: View): Int {
+        val spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        container.measure(spec, spec)
+
+        return if (container.context.resources.displayMetrics.heightPixels > container.measuredHeight) {
+            container.measuredHeight
+        } else {
+            // As the container is larger than available space let's use MATCH_PARENT as the height.
+            WindowManager.LayoutParams.MATCH_PARENT
+        }
     }
 }
 
