@@ -5,7 +5,7 @@
   "applications": {
     "gecko": {
       "id": "catgifs@mozilla.org",
-        "update_url": "https://github.com/Amejia481/android-components/blob/test_update_xpi/samples/browser/src/main/assets/extensions/borderify/v2/borderifyv2.xpi?raw=true"
+        "update_url": "https://github.com/Amejia481/android-components/blob/test_update_xpi/samples/browser/src/main/assets/extensions/borderify/update_manifest.json?raw=true"
     }
   },
   "content_scripts": [

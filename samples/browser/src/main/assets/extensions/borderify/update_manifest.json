@@ -1,0 +1,16 @@
+{
+  "addons": {
+    "catgifs@mozilla.org": {
+      "updates": [
+        {
+          "version": "1.0",
+          "update_link": "https://github.com/Amejia481/android-components/blob/test_update_xpi/samples/browser/src/main/assets/extensions/borderify/v1/borderifyv1.xpi?raw=true"
+        },
+        {
+          "version": "2.0",
+          "update_link": "https://github.com/Amejia481/android-components/blob/test_update_xpi/samples/browser/src/main/assets/extensions/borderify/v2/borderifyv2.xpi?raw=true"
+        }
+      ]
+    }
+  }
+}
