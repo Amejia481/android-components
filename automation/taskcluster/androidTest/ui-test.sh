@@ -84,7 +84,16 @@ samples=${component//samples-}
 if [[ "${component}" != samples-* ]]
 then
     # Case 1: tests for any component (but NOT samples, NOT real UI tests)
-    APK_APP="./samples/${component}/build/outputs/apk/geckoNightly/debug/samples-${component}-geckoNightly-debug.apk"
+    APK_APP="./samples/browser/build/outputs/apk/geckoNightly/debug/samples-browser-geckoNightly-debug.apk"
+  if [[ "${component}" *"-"* ]]
+    then
+      IFS='-' inarr=(${a})
+    APK_TEST="./components/${inarr[0]}/${inarr[1]}/build/outputs/apk/androidTest/debug/${component}-debug-androidTest.apk"
+
+  fi
+
+    /components/feature/pwa/build/outputs/apk/androidTest/debug/feature-pwa-debug-androidTest.apk
+    APK_TEST="./components/feature/${component}/build/outputs/apk/androidTest/debug/feature-${component}-debug-androidTest.apk"
     APK_TEST="./components/${component}/engine-gecko-nightly/build/outputs/apk/androidTest/debug/browser-engine-gecko-nightly-debug-androidTest.apk"
 elif [[ "${component}" == "samples-browser" ]]
 then
